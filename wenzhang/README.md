@@ -138,5 +138,134 @@ export default function RootLayout({
 ![](./img/6.png)
 如图，导航没问题了，接下来我们要做的是接口数据。
 ## 接口数据 
-next13 使用fetcher来获取数据，fetcher是一个函数，返回一个promise，我们先来看看、
-假设现在有个接口地址 http://localhost:3000/api/list
+next13 使用fetch来获取数据，返回一个promise，我们先来看看、
+假设现在有个接口地址 http://124.71.160.218:3008/tangshi
+- 封装一下fetch
+具体看个人喜好和具体业务逻辑，我这里是封装了一下fetch
+
+```ts
+// 封装 HTTP 请求函数
+export const BaseUrl = process.env.BASE_URL
+export class HTTP {
+  // 响应拦截器
+  static responseInterceptors = (res: any) => {
+    if (res.status === 200) {
+      return res.data
+    } else {
+      return Promise.reject(res.message)
+    }
+  }
+
+  static get(url: string, data?: any, next?: any, cache?: RequestCache) {
+    let params = ""
+    if (data) {
+      Object.keys(data).forEach((key) => {
+        params += `${key}=${data[key]}&`
+      })
+      params = params.slice(0, -1)
+      url = `${url}?${params}`
+    }
+    return fetch(BaseUrl + url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      next,
+      cache,
+    })
+      .then((res) => res.json())
+      .then((res) => {
+        return this.responseInterceptors(res)
+      })
+  }
+  static post(url: string, data?: any, next?: any, cache?: RequestCache) {
+    console.log(BaseUrl + url)
+    return fetch(BaseUrl + url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data || {}),
+      next,
+      cache,
+    })
+      .then((res) => res.json())
+      .then((res) => {
+        return this.responseInterceptors(res)
+      })
+  }
+}
+```
+
+- api接口
+```ts
+import { HTTP } from "./http"
+
+enum apiList {
+  tangshi = "/tangshi",
+}
+
+export async function getTangshiList(params = {}) {
+  return HTTP.post(apiList.tangshi, params)
+}
+
+// 根据id获取详情
+export async function getTestDetail(id: string) {
+  const { data } = await HTTP.get(`${apiList.tangshi}/${id}`)
+  return data
+}
+```
+- next.config.js
+我们区分了一下配置环境，开发环境和生产环境，接口地址不一样
+```js
+/** @type {import('next').NextConfig} */
+
+// 获取环境变量
+const NODE_ENV = process.env.NODE_ENV
+const BASE_URL = {
+  development: "http://124.71.160.218:3008",
+  production: "http://124.71.160.218:3008",
+}
+const nextConfig = {
+  env: {
+    BASE_URL: BASE_URL[NODE_ENV],
+  },
+}
+
+module.exports = nextConfig
+```
+- app.tsx
+```tsx
+import { getTangshiList } from "@/http/api"
+import Link from "next/link"
+
+export default async function page() {
+  const { items }: any = await getTangshiList({})
+
+  return (
+    <div className="text-center mt-2">
+      <h1 className="text-[20px]">唐诗三百首</h1>
+      <div className="flex flex-wrap p-2 mt-4">
+        {items.map((item: any) => {
+          return (
+            <div
+              key={item.id}
+              className="w-1/6 border text-center hover:bg-gray-200"
+            >
+              <Link href={`/tangshi/${item.id}`} className="block p-2">
+                <h1 className="text-[16px] font-bold">{item.title}</h1>
+                <h3 className="text-[14px] mt-2">{item.auth}</h3>
+              </Link>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+```
+![](./img/7.png)
+我们可以看到返回的html，已经是后端渲染好的了。next13默认ssr服务端渲染      
+控制台我们能看到
+![](./img/8.png)
+fetch是支持缓存的。这个我们来看看
